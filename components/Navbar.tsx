@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from './ui/Button'
 import { useState, useEffect } from 'react'
-import { LogOut, User } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 
 export function Navbar() {
   const pathname = usePathname()
@@ -63,14 +63,9 @@ export function Navbar() {
                 </Button>
               </div>
             ) : (
-              <div className="flex items-center space-x-4">
-                <Link href="/login">
-                  <Button variant="ghost" size="sm">Entrar</Button>
-                </Link>
-                <Link href="/signup">
-                  <Button size="sm">Começar Grátis</Button>
-                </Link>
-              </div>
+              <Link href="/dashboard">
+                <Button size="sm">Começar Grátis</Button>
+              </Link>
             )}
           </div>
         </div>
