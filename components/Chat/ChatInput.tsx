@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Send } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
+import { Button } from '../ui/Button'
 
 type Props = {
   onSend: (value: string) => void
