@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import OpenAI from 'openai'
 
+export const runtime = 'edge'
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
@@ -38,17 +40,39 @@ export async function POST(req: NextRequest) {
         ...messages,
       ],
       temperature: 0.7,
+      stream: true,
     })
 
-    const assistantMessage = completion.choices[0]?.message?.content || ''
+    const encoder = new TextEncoder()
 
-    return new Response(
-      JSON.stringify({ content: assistantMessage }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    )
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of completion) {
+            const text = chunk.choices[0]?.delta?.content || ''
+            if (text) {
+              controller.enqueue(encoder.encode(text))
+            }
+          }
+          controller.close()
+        } catch (error) {
+          controller.enqueue(
+            encoder.encode(
+              `\n\nErro: ${error instanceof Error ? error.message : 'Falha ao gerar resposta'}`
+            )
+          )
+          controller.close()
+        }
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+      },
+    })
   } catch (error) {
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }),
