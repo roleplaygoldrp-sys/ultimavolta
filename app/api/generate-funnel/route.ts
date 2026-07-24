@@ -56,7 +56,12 @@ Foco em conversão e escalabilidade. Responda APENAS o JSON.`,
       response_format: { type: 'json_object' },
     })
 
-    const funnel = extractJSON<FunnelResponse>(completion.choices[0].message.content)
+    const content = completion.choices[0].message.content
+    if (!content) {
+      throw new Error('IA não retornou conteúdo')
+    }
+
+    const funnel = extractJSON<FunnelResponse>(content)
 
     if (!funnel) {
       throw new Error('Falha ao gerar funil')
