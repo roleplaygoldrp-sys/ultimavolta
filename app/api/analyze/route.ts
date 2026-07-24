@@ -70,7 +70,12 @@ Responda APENAS o JSON, sem texto adicional.`,
       response_format: { type: 'json_object' },
     })
 
-    const analysis = extractJSON<AnalysisResponse>(completion.choices[0].message.content)
+    const content = completion.choices[0].message.content
+    if (!content) {
+      throw new Error('IA não retornou conteúdo')
+    }
+
+    const analysis = extractJSON<AnalysisResponse>(content)
 
     if (!analysis) {
       throw new Error('Falha ao processar análise da IA')
