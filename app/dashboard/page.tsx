@@ -18,20 +18,48 @@ export default function DashboardPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
+  const [isLoadingUser, setIsLoadingUser] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    checkUser()
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
         setUser(session.user)
+        createOrUpdateUser(session.user)
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
+        setAnalysis(null)
       }
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
     })
 
     return () => subscription.unsubscribe()
   }, [])
+
+  async function checkUser() {
+    setIsLoadingUser(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session) {
+      setUser(session.user)
+      await createOrUpdateUser(session.user)
+    }
+    setIsLoadingUser(false)
+  }
+
+  async function createOrUpdateUser(user: any) {
+    try {
+      // Tenta criar ou atualizar o usuário
+      await supabase.from('users').upsert({
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name || null,
+      }, {
+        onConflict: 'id'
+      })
+    } catch (err) {
+      console.error('Error creating user:', err)
+    }
+  }
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,20 +71,19 @@ export default function DashboardPage() {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
+          options: { 
+            data: { full_name: fullName },
+            emailRedirectTo: `${window.location.origin}/dashboard`
+          },
         })
         if (error) throw error
-
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          await supabase.from('users').insert({
-            id: user.id,
-            email: user.email,
-            full_name: fullName,
-          })
+        
+        // Auto sign in after signup
+        if (data.user) {
+          await createOrUpdateUser(data.user)
         }
       }
     } catch (err) {
@@ -79,6 +106,15 @@ export default function DashboardPage() {
 
   const handleError = (errorMessage: string) => {
     setError(errorMessage)
+  }
+
+  // Loading state
+  if (isLoadingUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-vanthex-400">Carregando...</div>
+      </div>
+    )
   }
 
   // Usuário não logado: mostra form de login
