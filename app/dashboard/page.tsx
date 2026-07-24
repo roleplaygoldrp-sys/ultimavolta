@@ -1,249 +1,279 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ChatMessage } from '@/components/chat/ChatMessage'
-import { ChatInput } from '@/components/chat/ChatInput'
-import { Button } from '@/components/ui/Button'
+import { AdUploader } from '@/components/AdUploader'
+import { AnalysisResult } from '@/components/AnalysisResult'
+import { FunnelGenerator } from '@/components/FunnelGenerator'
 import { Card } from '@/components/ui/Card'
-import { Plus, MessageSquare, LogOut } from 'lucide-react'
-
-type ChatMsg = {
-  role: 'user' | 'assistant'
-  content: string
-}
-
-type Thread = {
-  id: string
-  title: string
-  messages: ChatMsg[]
-}
+import { Button } from '@/components/ui/Button'
+import { AlertCircle, LogOut, Mail, Lock, UserPlus } from 'lucide-react'
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
-  const [threads, setThreads] = useState<Thread[]>([])
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
+  const [analysis, setAnalysis] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [authLoading, setAuthLoading] = useState(true)
-
-  const endRef = useRef<HTMLDivElement | null>(null)
+  const [isLogin, setIsLogin] = useState(true)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [isLoadingUser, setIsLoadingUser] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      setAuthLoading(false)
-    })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      setAuthLoading(false)
+    checkUser()
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setUser(session.user)
+        createOrUpdateUser(session.user)
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
+        setAnalysis(null)
+      }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-  const activeThread = useMemo(
-    () => threads.find((t) => t.id === activeThreadId) ?? threads[0] ?? null,
-    [threads, activeThreadId]
-  )
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [activeThread?.messages])
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-  }
-
-  const createThread = () => {
-    const thread: Thread = {
-      id: crypto.randomUUID(),
-      title: 'Nova conversa',
-      messages: [
-        {
-          role: 'assistant',
-          content:
-            'Olá. Sou a Vanthex. Posso analisar anúncios, criar estratégias, sugerir funis e otimizar sua operação de tráfego. O que você quer resolver hoje?',
-        },
-      ],
+  async function checkUser() {
+    setIsLoadingUser(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session) {
+      setUser(session.user)
+      await createOrUpdateUser(session.user)
     }
-
-    setThreads((prev) => [thread, ...prev])
-    setActiveThreadId(thread.id)
+    setIsLoadingUser(false)
   }
 
-  const updateThreadMessages = (threadId: string, messages: ChatMsg[]) => {
-    setThreads((prev) =>
-      prev.map((t) => (t.id === threadId ? { ...t, messages } : t))
-    )
+  async function createOrUpdateUser(user: any) {
+    try {
+      await supabase.from('users').upsert({
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name || null,
+      }, {
+        onConflict: 'id'
+      })
+    } catch (err) {
+      console.error('Error creating user:', err)
+    }
   }
 
-  const handleSend = async (text: string) => {
-    if (!activeThread) return
-
-    const nextMessages: ChatMsg[] = [
-      ...activeThread.messages,
-      { role: 'user', content: text },
-    ]
-
-    updateThreadMessages(activeThread.id, nextMessages)
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault()
     setIsLoading(true)
+    setError(null)
 
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: nextMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-        }),
-      })
-
-      if (!res.ok || !res.body) {
-        throw new Error('Falha ao gerar resposta')
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { 
+            data: { full_name: fullName },
+          },
+        })
+        if (error) throw error
+        
+        // Auto sign in após signup
+        if (data.user) {
+          await supabase.auth.signInWithPassword({ email, password })
+        }
       }
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let assistantText = ''
-
-      updateThreadMessages(activeThread.id, [
-        ...nextMessages,
-        { role: 'assistant', content: '' },
-      ])
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        assistantText += decoder.decode(value, { stream: true })
-        updateThreadMessages(activeThread.id, [
-          ...nextMessages,
-          { role: 'assistant', content: assistantText },
-        ])
-      }
-    } catch {
-      updateThreadMessages(activeThread.id, [
-        ...nextMessages,
-        {
-          role: 'assistant',
-          content: 'Tive um erro ao responder. Tente novamente em instantes.',
-        },
-      ])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro na autenticação')
     } finally {
       setIsLoading(false)
     }
   }
 
-  if (authLoading) {
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setAnalysis(null)
+  }
+
+  const handleAnalysisComplete = (result: any) => {
+    setAnalysis(result)
+    setError(null)
+  }
+
+  const handleError = (errorMessage: string) => {
+    setError(errorMessage)
+  }
+
+  // Loading state
+  if (isLoadingUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-vanthex-300">
-        Carregando...
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-vanthex-400">Carregando...</div>
       </div>
     )
   }
 
+  // Usuário não logado: mostra form de login
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <Card gradient className="max-w-md w-full text-center space-y-4">
-          <h1 className="text-2xl font-bold text-white">Acesse a Vanthex</h1>
-          <p className="text-vanthex-300">
-            Faça login para conversar com a sua IA de mercado digital.
+      <div className="min-h-screen flex items-center justify-center py-12 px-4">
+        <Card gradient className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="w-12 h-12 bg-gradient-to-br from-vanthex-400 to-vanthex-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <span className="text-white font-bold text-2xl">V</span>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-2">
+              {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta grátis'}
+            </h1>
+            <p className="text-vanthex-300">
+              {isLogin ? 'Acesse para analisar seus ads' : 'Comece agora sem cartão'}
+            </p>
+          </div>
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && (
+              <div>
+                <label className="block text-vanthex-200 mb-2">Nome Completo</label>
+                <div className="relative">
+                  <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-vanthex-500" />
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Seu nome"
+                    required
+                    className="w-full pl-10 pr-4 py-3 bg-vanthex-950/50 border border-vanthex-700 rounded-lg text-white placeholder-vanthex-500 focus:outline-none focus:border-vanthex-500 transition-colors"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-vanthex-200 mb-2">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-vanthex-500" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  required
+                  className="w-full pl-10 pr-4 py-3 bg-vanthex-950/50 border border-vanthex-700 rounded-lg text-white placeholder-vanthex-500 focus:outline-none focus:border-vanthex-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-vanthex-200 mb-2">Senha</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-vanthex-500" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                  minLength={6}
+                  required
+                  className="w-full pl-10 pr-4 py-3 bg-vanthex-950/50 border border-vanthex-700 rounded-lg text-white placeholder-vanthex-500 focus:outline-none focus:border-vanthex-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="text-red-400 text-sm flex items-center">
+                <AlertCircle className="w-4 h-4 mr-2" />
+                {error}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              isLoading={isLoading}
+              className="w-full"
+              size="lg"
+            >
+              {isLogin ? 'Entrar' : 'Criar Conta Grátis'}
+            </Button>
+          </form>
+
+          <div className="text-center mt-6">
+            <button
+              onClick={() => {
+                setIsLogin(!isLogin)
+                setError(null)
+              }}
+              className="text-vanthex-400 hover:text-vanthex-300 text-sm"
+            >
+              {isLogin ? 'Não tem conta? Criar grátis' : 'Já tem conta? Fazer login'}
+            </button>
+          </div>
+
+          <p className="text-center text-vanthex-500 text-xs mt-6">
+            Ao continuar, você concorda com nossos termos de uso
           </p>
-          <Button onClick={() => (window.location.href = '/')}>Voltar</Button>
         </Card>
       </div>
     )
   }
 
-  if (!activeThread) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <Card gradient className="max-w-xl w-full text-center space-y-6">
-          <h1 className="text-3xl font-bold text-white">Vanthex</h1>
-          <p className="text-vanthex-300">
-            Uma IA para anúncios, funis, copy e escala.
-          </p>
-          <Button onClick={createThread} className="mx-auto">
-            <Plus className="h-4 w-4 mr-2" />
-            Nova conversa
-          </Button>
-        </Card>
-      </div>
-    )
-  }
-
+  // Usuário logado: mostra dashboard completo
   return (
-    <div className="min-h-screen flex bg-[#0c081f] text-white">
-      <aside className="hidden md:flex w-80 flex-col border-r border-white/10 bg-[#120a2a] p-4">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-bold">Vanthex</h2>
-            <p className="text-xs text-vanthex-300">IA para mercado digital</p>
+    <div className="min-h-screen py-12 px-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center space-x-4">
+            <div className="w-10 h-10 bg-gradient-to-br from-vanthex-400 to-vanthex-600 rounded-xl flex items-center justify-center">
+              <span className="text-white font-bold text-xl">V</span>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+              <p className="text-vanthex-300 text-sm">{user.email}</p>
+            </div>
           </div>
           <Button variant="ghost" size="sm" onClick={handleSignOut}>
-            <LogOut className="h-4 w-4" />
+            <LogOut className="w-4 h-4 mr-2" />
+            Sair
           </Button>
         </div>
 
-        <Button onClick={createThread} className="mb-4 w-full">
-          <Plus className="h-4 w-4 mr-2" />
-          Nova conversa
-        </Button>
+        {/* Main Content */}
+        <div className="grid lg:grid-cols-2 gap-8">
+          {/* Upload & Analysis */}
+          <div className="space-y-6">
+            <AdUploader
+              onAnalysisComplete={handleAnalysisComplete}
+              onError={handleError}
+            />
+            
+            {error && (
+              <Card className="border-red-500/50 bg-red-500/10">
+                <div className="flex items-center text-red-400">
+                  <AlertCircle className="w-5 h-5 mr-2" />
+                  {error}
+                </div>
+              </Card>
+            )}
 
-        <div className="space-y-2 overflow-y-auto">
-          {threads.map((thread) => (
-            <button
-              key={thread.id}
-              onClick={() => setActiveThreadId(thread.id)}
-              className={`w-full rounded-xl border px-3 py-3 text-left transition ${
-                thread.id === activeThreadId
-                  ? 'border-vanthex-500 bg-vanthex-600/20'
-                  : 'border-white/10 bg-white/5 hover:bg-white/10'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-vanthex-300" />
-                <span className="text-sm font-medium">{thread.title}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      <main className="flex-1 flex flex-col">
-        <header className="border-b border-white/10 bg-[#120a2a]/70 px-4 py-4 backdrop-blur-md">
-          <div className="mx-auto flex max-w-4xl items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold">Vanthex Chat</h1>
-              <p className="text-sm text-vanthex-300">
-                Pergunte qualquer coisa sobre performance digital
-              </p>
-            </div>
-            <div className="text-xs text-vanthex-300">{user.email}</div>
+            {analysis && (
+              <AnalysisResult
+                score={analysis.score}
+                suggestions={analysis.suggestions}
+                strengths={analysis.strengths}
+                weaknesses={analysis.weaknesses}
+                improvements={analysis.improvements}
+              />
+            )}
           </div>
-        </header>
 
-        <div className="flex-1 overflow-y-auto px-4 py-6">
-          <div className="mx-auto flex max-w-4xl flex-col gap-4">
-            {activeThread.messages.map((message, idx) => (
-              <ChatMessage key={idx} role={message.role} content={message.content} />
-            ))}
-            <div ref={endRef} />
+          {/* Funnel Generator */}
+          <div>
+            <FunnelGenerator />
           </div>
         </div>
-
-        <div className="border-t border-white/10 bg-[#120a2a]/70 px-4 py-4 backdrop-blur-md">
-          <div className="mx-auto max-w-4xl">
-            <ChatInput onSend={handleSend} isLoading={isLoading} />
-          </div>
-        </div>
-      </main>
+      </div>
     </div>
   )
 }
