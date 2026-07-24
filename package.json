@@ -14,7 +14,11 @@
     "react-dom": "^19.0.0",
     "lucide-react": "latest",
     "@supabase/supabase-js": "latest",
-    "groq-sdk": "latest"
+    "groq-sdk": "latest",
+    "autoprefixer": "latest",
+    "clsx": "latest",
+    "tailwind-merge": "latest",
+    "stripe": "latest"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
