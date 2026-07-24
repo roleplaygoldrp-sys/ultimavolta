@@ -7,14 +7,17 @@ import { AnalysisResult } from '@/components/AnalysisResult'
 import { FunnelGenerator } from '@/components/FunnelGenerator'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { AlertCircle, LogOut, Mail, UserPlus } from 'lucide-react'
+import { AlertCircle, LogOut, Mail, Lock, UserPlus } from 'lucide-react'
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
   const [analysis, setAnalysis] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
   const [isLoadingUser, setIsLoadingUser] = useState(false)
 
   useEffect(() => {
@@ -57,23 +60,32 @@ export default function DashboardPage() {
     }
   }
 
-  const handleMagicLink = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
-        },
-      })
-      if (error) throw error
-      
-      setError('Email de login enviado! Verifique sua caixa de entrada.')
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { 
+            data: { full_name: fullName },
+          },
+        })
+        if (error) throw error
+        
+        // Auto sign in após signup
+        if (data.user) {
+          await supabase.auth.signInWithPassword({ email, password })
+        }
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao enviar email')
+      setError(err instanceof Error ? err.message : 'Erro na autenticação')
     } finally {
       setIsLoading(false)
     }
@@ -113,14 +125,31 @@ export default function DashboardPage() {
               <span className="text-white font-bold text-2xl">V</span>
             </div>
             <h1 className="text-2xl font-bold text-white mb-2">
-              Acesse com Magic Link
+              {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta grátis'}
             </h1>
             <p className="text-vanthex-300">
-              Sem senha. Só digite seu email e receba um link mágico.
+              {isLogin ? 'Acesse para analisar seus ads' : 'Comece agora sem cartão'}
             </p>
           </div>
 
-          <form onSubmit={handleMagicLink} className="space-y-4">
+          <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && (
+              <div>
+                <label className="block text-vanthex-200 mb-2">Nome Completo</label>
+                <div className="relative">
+                  <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-vanthex-500" />
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Seu nome"
+                    required
+                    className="w-full pl-10 pr-4 py-3 bg-vanthex-950/50 border border-vanthex-700 rounded-lg text-white placeholder-vanthex-500 focus:outline-none focus:border-vanthex-500 transition-colors"
+                  />
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-vanthex-200 mb-2">Email</label>
               <div className="relative">
@@ -136,8 +165,24 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            <div>
+              <label className="block text-vanthex-200 mb-2">Senha</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-vanthex-500" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                  minLength={6}
+                  required
+                  className="w-full pl-10 pr-4 py-3 bg-vanthex-950/50 border border-vanthex-700 rounded-lg text-white placeholder-vanthex-500 focus:outline-none focus:border-vanthex-500 transition-colors"
+                />
+              </div>
+            </div>
+
             {error && (
-              <div className={`text-sm flex items-center ${error.includes('enviado') ? 'text-green-400' : 'text-red-400'}`}>
+              <div className="text-red-400 text-sm flex items-center">
                 <AlertCircle className="w-4 h-4 mr-2" />
                 {error}
               </div>
@@ -149,10 +194,21 @@ export default function DashboardPage() {
               className="w-full"
               size="lg"
             >
-              <Mail className="w-5 h-5 mr-2" />
-              {isLoading ? 'Enviando...' : 'Receber Magic Link'}
+              {isLogin ? 'Entrar' : 'Criar Conta Grátis'}
             </Button>
           </form>
+
+          <div className="text-center mt-6">
+            <button
+              onClick={() => {
+                setIsLogin(!isLogin)
+                setError(null)
+              }}
+              className="text-vanthex-400 hover:text-vanthex-300 text-sm"
+            >
+              {isLogin ? 'Não tem conta? Criar grátis' : 'Já tem conta? Fazer login'}
+            </button>
+          </div>
 
           <p className="text-center text-vanthex-500 text-xs mt-6">
             Ao continuar, você concorda com nossos termos de uso
@@ -192,7 +248,7 @@ export default function DashboardPage() {
               onError={handleError}
             />
             
-            {error && !error.includes('enviado') && (
+            {error && (
               <Card className="border-red-500/50 bg-red-500/10">
                 <div className="flex items-center text-red-400">
                   <AlertCircle className="w-5 h-5 mr-2" />
