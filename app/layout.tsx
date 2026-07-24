@@ -3,8 +3,15 @@ import { Inter, Sora } from 'next/font/google'
 import './globals.css'
 import { Navbar } from '@/components/Navbar'
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
-const sora = Sora({ subsets: ['latin'], variable: '--font-sora' })
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+})
+
+const sora = Sora({
+  subsets: ['latin'],
+  variable: '--font-sora',
+})
 
 export const metadata: Metadata = {
   title: 'Vanthex',
