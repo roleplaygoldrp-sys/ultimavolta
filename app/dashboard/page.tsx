@@ -7,8 +7,7 @@ import { AnalysisResult } from '@/components/AnalysisResult'
 import { FunnelGenerator } from '@/components/FunnelGenerator'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { AlertCircle, CheckCircle, LogOut, Mail, Lock, UserPlus } from 'lucide-react'
-import { useState } from 'react'
+import { AlertCircle, LogOut, Mail, Lock, UserPlus } from 'lucide-react'
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
