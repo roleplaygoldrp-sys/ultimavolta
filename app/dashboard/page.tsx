@@ -1,279 +1,213 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { AdUploader } from '@/components/AdUploader'
-import { AnalysisResult } from '@/components/AnalysisResult'
-import { FunnelGenerator } from '@/components/FunnelGenerator'
-import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { AlertCircle, LogOut, Mail, Lock, UserPlus } from 'lucide-react'
+import { Card } from '@/components/ui/Card'
+import { Plus, MessageSquare, LogOut, Send } from 'lucide-react'
+
+type Message = {
+  role: 'user' | 'assistant'
+  content: string
+}
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
-  const [analysis, setAnalysis] = useState<any>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [isLogin, setIsLogin] = useState(true)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [isLoadingUser, setIsLoadingUser] = useState(false)
+  const [isSidebarOpen, setSidebarOpen] = useState(true)
+  const endRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    checkUser()
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        setUser(session.user)
-        createOrUpdateUser(session.user)
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null)
-        setAnalysis(null)
-      }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-  async function checkUser() {
-    setIsLoadingUser(true)
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session) {
-      setUser(session.user)
-      await createOrUpdateUser(session.user)
-    }
-    setIsLoadingUser(false)
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
   }
 
-  async function createOrUpdateUser(user: any) {
-    try {
-      await supabase.from('users').upsert({
-        id: user.id,
-        email: user.email,
-        full_name: user.user_metadata?.full_name || null,
-      }, {
-        onConflict: 'id'
-      })
-    } catch (err) {
-      console.error('Error creating user:', err)
-    }
-  }
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault()
+    const userMessage: Message = { role: 'user', content: input.trim() }
+    setMessages((prev) => [...prev, userMessage])
+    setInput('')
     setIsLoading(true)
-    setError(null)
 
     try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { 
-            data: { full_name: fullName },
-          },
-        })
-        if (error) throw error
-        
-        // Auto sign in após signup
-        if (data.user) {
-          await supabase.auth.signInWithPassword({ email, password })
-        }
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...messages, userMessage].map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
+      })
+
+      if (!res.ok || !res.body) throw new Error('Erro ao gerar resposta')
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let assistantText = ''
+
+      setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        assistantText += decoder.decode(value, { stream: true })
+        setMessages((prev) => [
+          ...prev.slice(0, -1),
+          { role: 'assistant', content: assistantText },
+        ])
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro na autenticação')
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Tive um erro ao responder. Tente novamente.' },
+      ])
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
-    setAnalysis(null)
-  }
-
-  const handleAnalysisComplete = (result: any) => {
-    setAnalysis(result)
-    setError(null)
-  }
-
-  const handleError = (errorMessage: string) => {
-    setError(errorMessage)
-  }
-
-  // Loading state
-  if (isLoadingUser) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-vanthex-400">Carregando...</div>
-      </div>
-    )
-  }
-
-  // Usuário não logado: mostra form de login
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center py-12 px-4">
-        <Card gradient className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="w-12 h-12 bg-gradient-to-br from-vanthex-400 to-vanthex-600 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-white font-bold text-2xl">V</span>
-            </div>
-            <h1 className="text-2xl font-bold text-white mb-2">
-              {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta grátis'}
-            </h1>
-            <p className="text-vanthex-300">
-              {isLogin ? 'Acesse para analisar seus ads' : 'Comece agora sem cartão'}
-            </p>
-          </div>
-
-          <form onSubmit={handleAuth} className="space-y-4">
-            {!isLogin && (
-              <div>
-                <label className="block text-vanthex-200 mb-2">Nome Completo</label>
-                <div className="relative">
-                  <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-vanthex-500" />
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Seu nome"
-                    required
-                    className="w-full pl-10 pr-4 py-3 bg-vanthex-950/50 border border-vanthex-700 rounded-lg text-white placeholder-vanthex-500 focus:outline-none focus:border-vanthex-500 transition-colors"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-vanthex-200 mb-2">Email</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-vanthex-500" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="seu@email.com"
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-vanthex-950/50 border border-vanthex-700 rounded-lg text-white placeholder-vanthex-500 focus:outline-none focus:border-vanthex-500 transition-colors"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-vanthex-200 mb-2">Senha</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-vanthex-500" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mínimo 6 caracteres"
-                  minLength={6}
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-vanthex-950/50 border border-vanthex-700 rounded-lg text-white placeholder-vanthex-500 focus:outline-none focus:border-vanthex-500 transition-colors"
-                />
-              </div>
-            </div>
-
-            {error && (
-              <div className="text-red-400 text-sm flex items-center">
-                <AlertCircle className="w-4 h-4 mr-2" />
-                {error}
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              isLoading={isLoading}
-              className="w-full"
-              size="lg"
-            >
-              {isLogin ? 'Entrar' : 'Criar Conta Grátis'}
-            </Button>
-          </form>
-
-          <div className="text-center mt-6">
-            <button
-              onClick={() => {
-                setIsLogin(!isLogin)
-                setError(null)
-              }}
-              className="text-vanthex-400 hover:text-vanthex-300 text-sm"
-            >
-              {isLogin ? 'Não tem conta? Criar grátis' : 'Já tem conta? Fazer login'}
-            </button>
-          </div>
-
-          <p className="text-center text-vanthex-500 text-xs mt-6">
-            Ao continuar, você concorda com nossos termos de uso
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <Card gradient className="max-w-md w-full text-center space-y-4">
+          <h1 className="text-2xl font-bold text-white">Acesse a Vanthex</h1>
+          <p className="text-vanthex-300">
+            Faça login para conversar com a sua IA de mercado digital.
           </p>
+          <Button onClick={() => (window.location.href = '/')}>Voltar</Button>
         </Card>
       </div>
     )
   }
 
-  // Usuário logado: mostra dashboard completo
   return (
-    <div className="min-h-screen py-12 px-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center space-x-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-vanthex-400 to-vanthex-600 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-xl">V</span>
-            </div>
+    <div className="min-h-screen flex bg-[#0c081f] text-white">
+      <aside
+        className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 overflow-hidden border-r border-white/10 bg-[#120a2a]`}
+      >
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-              <p className="text-vanthex-300 text-sm">{user.email}</p>
+              <h2 className="text-xl font-bold">Vanthex</h2>
+              <p className="text-xs text-vanthex-300">IA para mercado digital</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <Button onClick={() => setMessages([])} className="mb-4 w-full">
+            <Plus className="h-4 w-4 mr-2" />
+            Nova conversa
+          </Button>
+
+          <div className="space-y-2">
+            <button className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left transition hover:bg-white/10">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-vanthex-300" />
+                <span className="text-sm font-medium">Nova conversa</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <main className="flex-1 flex flex-col">
+        <header className="border-b border-white/10 bg-[#120a2a]/70 px-4 py-3 backdrop-blur-md">
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(!isSidebarOpen)}>
+              <MessageSquare className="h-5 w-5" />
+            </Button>
+            <div className="text-xs text-vanthex-300">{user.email}</div>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-4 py-6">
+          <div className="mx-auto max-w-4xl flex flex-col gap-4">
+            {messages.length === 0 && (
+              <div className="text-center py-16">
+                <h1 className="text-3xl font-bold mb-4">Como posso ajudar hoje?</h1>
+                <p className="text-vanthex-300">
+                  Pergunte sobre anúncios, funis, copy, estratégia ou escala.
+                </p>
+              </div>
+            )}
+
+            {messages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm md:text-base leading-relaxed whitespace-pre-wrap ${
+                    msg.role === 'user'
+                      ? 'bg-vanthex-600 text-white shadow-lg shadow-vanthex-500/20'
+                      : 'bg-white/5 text-vanthex-100 border border-white/10'
+                  }`}
+                >
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-vanthex-300">
+                  Gerando resposta...
+                </div>
+              </div>
+            )}
+
+            <div ref={endRef} />
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 bg-[#120a2a]/70 px-4 py-4 backdrop-blur-md">
+          <div className="mx-auto max-w-4xl">
+            <div className="flex gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur-md">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Pergunte qualquer coisa sobre performance digital..."
+                className="min-h-[52px] max-h-40 flex-1 resize-none bg-transparent px-2 py-3 text-white placeholder:text-vanthex-300 focus:outline-none"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSend()
+                  }
+                }}
+              />
+              <Button onClick={handleSend} isLoading={isLoading} className="self-end">
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleSignOut}>
-            <LogOut className="w-4 h-4 mr-2" />
-            Sair
-          </Button>
         </div>
-
-        {/* Main Content */}
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Upload & Analysis */}
-          <div className="space-y-6">
-            <AdUploader
-              onAnalysisComplete={handleAnalysisComplete}
-              onError={handleError}
-            />
-            
-            {error && (
-              <Card className="border-red-500/50 bg-red-500/10">
-                <div className="flex items-center text-red-400">
-                  <AlertCircle className="w-5 h-5 mr-2" />
-                  {error}
-                </div>
-              </Card>
-            )}
-
-            {analysis && (
-              <AnalysisResult
-                score={analysis.score}
-                suggestions={analysis.suggestions}
-                strengths={analysis.strengths}
-                weaknesses={analysis.weaknesses}
-                improvements={analysis.improvements}
-              />
-            )}
-          </div>
-
-          {/* Funnel Generator */}
-          <div>
-            <FunnelGenerator />
-          </div>
-        </div>
-      </div>
+      </main>
     </div>
   )
 }
