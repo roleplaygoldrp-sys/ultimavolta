@@ -19,28 +19,14 @@ const handleSend = async () => {
       }),
     })
 
-    if (!res.ok || !res.body) {
+    if (!res.ok) {
       throw new Error('Erro ao gerar resposta')
     }
 
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let assistantText = ''
+    const data = await res.json()
+    const assistantMessage = data.content
 
-    setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      const text = decoder.decode(value, { stream: true })
-      assistantText += text
-
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        { role: 'assistant', content: assistantText },
-      ])
-    }
+    setMessages((prev) => [...prev, { role: 'assistant', content: assistantMessage }])
   } catch (error) {
     setMessages((prev) => [
       ...prev,
