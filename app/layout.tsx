@@ -1,14 +1,14 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Sora } from 'next/font/google'
 import './globals.css'
 import { Navbar } from '@/components/Navbar'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+const sora = Sora({ subsets: ['latin'], variable: '--font-sora' })
 
 export const metadata: Metadata = {
-  title: 'Vanthex - IA Profissional para Facebook Ads',
-  description: 'Analise imagens de ads e receba estratégias vencedoras automaticamente. Economize tempo e escale seus resultados.',
-  keywords: ['facebook ads', 'ia', 'marketing digital', 'análise de ads', 'funis'],
+  title: 'Vanthex',
+  description: 'IA para análise de criativos e escala de ads.',
 }
 
 export default function RootLayout({
@@ -18,11 +18,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" className="dark">
-      <body className={`${inter.className} bg-hero-gradient min-h-screen`}>
+      <body className={`${inter.variable} ${sora.variable} bg-hero-gradient min-h-screen`}>
         <Navbar />
-        <main className="pt-16">
-          {children}
-        </main>
+        <main className="pt-16">{children}</main>
       </body>
     </html>
   )
