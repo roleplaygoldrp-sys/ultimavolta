@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Groq } from 'groq-sdk'
+import Groq from 'groq-sdk'
 
 export const dynamic = 'force-dynamic'
 
