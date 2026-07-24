@@ -11,6 +11,11 @@
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(to bottom, rgb(var(--background-start-rgb)), rgb(var(--background-end-rgb)));
+  font-family: var(--font-inter), sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sora), sans-serif;
 }
 
 @layer utilities {
@@ -19,7 +24,6 @@ body {
   }
 }
 
-/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -35,10 +39,4 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 92, 246, 0.7);
-}
-body {
-  font-family: var(--font-inter), sans-serif;
-}
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-sora), sans-serif;
 }
