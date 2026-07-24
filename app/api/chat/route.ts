@@ -1,35 +1,22 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
-export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
-const systemPrompt = `
-Você é a Vanthex, uma IA especialista em mercado digital.
-
-Você ajuda com:
-- Facebook Ads
-- Google Ads
-- Criativos
-- Copywriting
-- Funis
-- Oferta
-- Escala
-- Diagnóstico de performance
-
-Regras:
-- Responda de forma objetiva, estratégica e profissional.
-- Dê respostas práticas, sem enrolação.
-- Se o usuário pedir análise, avalie pontos fortes, falhas e melhorias.
-- Se pedir funil, entregue estrutura simples e aplicável.
-- Se faltar contexto, faça uma pergunta curta.
-- Não seja genérico. Fale como um especialista de tráfego e growth.
-`
+const systemPrompt = `Você é a Vanthex, IA especialista em mercado digital. Responda de forma objetiva sobre anúncios, funis, copy e escala.`
 
 export async function POST(req: NextRequest) {
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json(
+      { error: 'API key missing' },
+      { status: 500 }
+    )
+  }
+
   try {
     const { messages } = await req.json()
 
@@ -40,43 +27,15 @@ export async function POST(req: NextRequest) {
         ...messages,
       ],
       temperature: 0.7,
-      stream: true,
     })
 
-    const encoder = new TextEncoder()
+    const assistantMessage = completion.choices[0]?.message?.content || ''
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of completion) {
-            const text = chunk.choices[0]?.delta?.content || ''
-            if (text) {
-              controller.enqueue(encoder.encode(text))
-            }
-          }
-          controller.close()
-        } catch (error) {
-          controller.enqueue(
-            encoder.encode(
-              `\n\nErro: ${error instanceof Error ? error.message : 'Falha ao gerar resposta'}`
-            )
-          )
-          controller.close()
-        }
-      },
-    })
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-      },
-    })
+    return NextResponse.json({ content: assistantMessage })
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Erro interno' },
+      { status: 500 }
     )
   }
 }
