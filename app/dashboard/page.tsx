@@ -145,15 +145,14 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 py-6">
-          <div className="mx-auto max-w-4xl flex flex-col gap-4">
-            {messages.length === 0 && (
-              <div className="text-center py-16">
-                <h1 className="text-3xl font-bold mb-4">Como posso ajudar hoje?</h1>
-                <p className="text-vanthex-300">
-                  Pergunte sobre anúncios, funis, copy, estratégia ou escala.
-                </p>
-              </div>
+        {messages.length === 0 && (
+  <div className="text-center py-16">
+    <h1 className="text-3xl font-bold mb-4">Como posso ajudar hoje?</h1>
+    <p className="text-vanthex-300">
+      Somos a Vanthex IA especialista em analisar oportunidades haha, fala ai oq precisa?
+    </p>
+  </div>
+)}
             )}
 
             {messages.map((msg, idx) => (
