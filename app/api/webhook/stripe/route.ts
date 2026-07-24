@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getServerSupabase } from '@/lib/supabase'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-})
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
 const planMap = {
   'prod_vanthex_pro': 'pro',
@@ -44,13 +42,11 @@ export async function POST(request: NextRequest) {
       if (userId) {
         const plan = planMap[productId as keyof typeof planMap] || 'pro'
 
-        // Update user plan
         await supabase
           .from('users')
           .update({ plan, credits: plan === 'pro' ? 9999 : 9999 })
           .eq('id', userId)
 
-        // Create subscription record
         await supabase.from('subscriptions').insert({
           user_id: userId,
           stripe_subscription_id: subscription.id,
