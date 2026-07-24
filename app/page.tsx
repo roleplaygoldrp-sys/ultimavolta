@@ -1,37 +1,55 @@
-import { Button } from '@/components/ui/Button'
-import Link from 'next/link'
+const handleSend = async () => {
+  if (!input.trim() || isLoading) return
 
-export default function HomePage() {
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="text-center max-w-4xl mx-auto">
-        <div className="mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-vanthex-400 to-vanthex-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-vanthex-500/30">
-            <span className="text-white font-bold text-3xl">V</span>
-          </div>
-        </div>
+  const userMessage: Message = { role: 'user', content: input.trim() }
+  const updatedMessages = [...messages, userMessage]
+  setMessages(updatedMessages)
+  setInput('')
+  setIsLoading(true)
 
-        <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight tracking-tight">
-          Sua inteligência para<br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-vanthex-300 to-vanthex-500">
-            escalar anúncios
-          </span>
-        </h1>
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: updatedMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+      }),
+    })
 
-        <p className="text-lg md:text-xl text-vanthex-200 mb-10 max-w-2xl mx-auto leading-relaxed">
-          A Vanthex analisa criativos, identifica oportunidades e sugere próximos passos com precisão.
-        </p>
+    if (!res.ok || !res.body) {
+      throw new Error('Erro ao gerar resposta')
+    }
 
-        <Link href="/dashboard">
-          <Button size="lg" className="px-8 py-4 text-base shadow-xl shadow-vanthex-500/30">
-            Utilizar ferramenta agora
-          </Button>
-        </Link>
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let assistantText = ''
 
-        <p className="text-vanthex-400 text-sm mt-8">
-          Acesso rápido • Sem fricção • Resultado em segundos
-        </p>
-      </div>
-    </div>
-  )
+    setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const text = decoder.decode(value, { stream: true })
+      assistantText += text
+
+      setMessages((prev) => [
+        ...prev.slice(0, -1),
+        { role: 'assistant', content: assistantText },
+      ])
+    }
+  } catch (error) {
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'assistant',
+        content: `Erro: ${error instanceof Error ? error.message : 'Falha ao responder'}`,
+      },
+    ])
+  } finally {
+    setIsLoading(false)
+  }
 }
