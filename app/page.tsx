@@ -1,36 +1,115 @@
-import Link from 'next/link'
-import { Button } from '@/components/ui/Button'
+'use client'
 
-export default function HomePage() {
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { AdUploader } from '@/components/AdUploader'
+import { AnalysisResult } from '@/components/AnalysisResult'
+import { FunnelGenerator } from '@/components/FunnelGenerator'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { AlertCircle, LogOut } from 'lucide-react'
+
+export default function DashboardPage() {
+  const [user, setUser] = useState<any>(null)
+  const [analysis, setAnalysis] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoadingUser, setIsLoadingUser] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setIsLoadingUser(false)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+  }
+
+  const handleAnalysisComplete = (result: any) => {
+    setAnalysis(result)
+    setError(null)
+  }
+
+  const handleError = (errorMessage: string) => {
+    setError(errorMessage)
+  }
+
+  if (isLoadingUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-vanthex-300">
+        Carregando...
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <Card gradient className="max-w-md w-full text-center space-y-4">
+          <h1 className="text-2xl font-bold text-white">Acesse a Vanthex</h1>
+          <p className="text-vanthex-300">
+            Faça login para analisar seus anúncios.
+          </p>
+          <Button onClick={() => (window.location.href = '/')}>Voltar</Button>
+        </Card>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="text-center max-w-4xl mx-auto">
-        <div className="mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-vanthex-400 to-vanthex-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-vanthex-500/30">
-            <span className="text-white font-bold text-3xl">V</span>
+    <div className="min-h-screen py-12 px-4">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+            <p className="text-vanthex-300 text-sm">{user.email}</p>
           </div>
+          <Button variant="ghost" size="sm" onClick={handleSignOut}>
+            <LogOut className="w-4 h-4 mr-2" />
+            Sair
+          </Button>
         </div>
 
-        <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight tracking-tight">
-          Sua inteligência para<br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-vanthex-300 to-vanthex-500">
-            escalar anúncios
-          </span>
-        </h1>
+        <div className="grid lg:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <AdUploader
+              onAnalysisComplete={handleAnalysisComplete}
+              onError={handleError}
+            />
 
-        <p className="text-lg md:text-xl text-vanthex-200 mb-10 max-w-2xl mx-auto leading-relaxed">
-          A Vanthex analisa criativos, identifica oportunidades e sugere próximos passos com precisão.
-        </p>
+            {error && (
+              <Card className="border-red-500/50 bg-red-500/10">
+                <div className="flex items-center text-red-400">
+                  <AlertCircle className="w-5 h-5 mr-2" />
+                  {error}
+                </div>
+              </Card>
+            )}
 
-        <Link href="/dashboard">
-          <Button size="lg" className="px-8 py-4 text-base shadow-xl shadow-vanthex-500/30">
-            Utilizar ferramenta agora
-          </Button>
-        </Link>
+            {analysis && (
+              <AnalysisResult
+                score={analysis.score}
+                suggestions={analysis.suggestions}
+                strengths={analysis.strengths}
+                weaknesses={analysis.weaknesses}
+                improvements={analysis.improvements}
+              />
+            )}
+          </div>
 
-        <p className="text-vanthex-400 text-sm mt-8">
-          Acesso rápido • Sem fricção • Resultado em segundos
-        </p>
+          <div>
+            <FunnelGenerator />
+          </div>
+        </div>
       </div>
     </div>
   )
